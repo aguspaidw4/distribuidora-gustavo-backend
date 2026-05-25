@@ -1,11 +1,17 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
+
 import * as bcrypt from 'bcrypt';
 
 import { UsersService } from './users.service';
+
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('users')
 export class UsersController {
@@ -25,5 +31,11 @@ export class UsersController {
       name: body.name,
       password: hashedPassword,
     });
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@Request() req: any) {
+    return req.user;
   }
 }

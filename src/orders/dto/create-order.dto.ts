@@ -8,6 +8,7 @@ import {
 import { Type } from 'class-transformer';
 
 class OrderItemDto {
+
   @IsInt()
   productId: number;
 
@@ -17,6 +18,10 @@ class OrderItemDto {
 }
 
 export class CreateOrderDto {
+
+  @IsInt()
+  customerId: number;
+
   @IsArray()
   @ValidateNested({ each: true })
 

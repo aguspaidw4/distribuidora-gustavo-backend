@@ -16,6 +16,8 @@ import { StockMovement } from '../stock/entities/stock-movement.entity';
 
 import { CreateOrderDto } from './dto/create-order.dto';
 
+import { Customer } from '../customers/entities/customer.entity';
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -30,11 +32,27 @@ export class OrdersService {
 
     @InjectRepository(StockMovement)
     private stockRepository: Repository<StockMovement>,
+
+    @InjectRepository(Customer)
+    private customersRepository: Repository<Customer>,
   ) {}
 
   async create(createOrderDto: CreateOrderDto) {
 
     let total = 0;
+
+    const customer =
+      await this.customersRepository.findOne({
+        where: {
+          id: createOrderDto.customerId,
+        },
+      });
+
+    if (!customer) {
+      throw new BadRequestException(
+        'Customer not found',
+      );
+    }
 
     const details: OrderDetail[] = [];
 
@@ -98,7 +116,14 @@ export class OrdersService {
     }
 
     const order = this.ordersRepository.create({
+      customer,
+
       total,
+
+      paidAmount: 0,
+
+      pendingAmount: total,
+
       details,
     });
 

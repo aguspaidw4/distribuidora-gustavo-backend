@@ -12,13 +12,18 @@ import { Product } from '../products/entities/product.entity';
 
 import { StockMovement } from '../stock/entities/stock-movement.entity';
 
+import { CustomersModule } from '../customers/customers.module';
+
+import { Customer } from '../customers/entities/customer.entity';
 @Module({
   imports: [
+    CustomersModule,
     TypeOrmModule.forFeature([
       Order,
       OrderDetail,
       Product,
-      StockMovement,
+      StockMovement,    
+      Customer,
     ]),
   ],
 

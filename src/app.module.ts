@@ -13,6 +13,7 @@ import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { StockModule } from './stock/stock.module';
 import { PurchasesModule } from './purchases/purchases.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 
 @Module({
@@ -59,6 +60,8 @@ import { PurchasesModule } from './purchases/purchases.module';
     StockModule,
 
     PurchasesModule,
+
+    DashboardModule,
   ],
 })
 export class AppModule {}

@@ -1,0 +1,23 @@
+version: '3.9'
+
+services:
+
+  mysql:
+    image: mysql:8
+    container_name: distribuidora_mysql
+    restart: always
+
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: distribuidora_db
+      MYSQL_USER: distribuidora_user
+      MYSQL_PASSWORD: N41rD42011ABC
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:

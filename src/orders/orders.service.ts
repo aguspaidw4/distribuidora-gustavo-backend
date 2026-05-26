@@ -18,6 +18,8 @@ import { CreateOrderDto } from './dto/create-order.dto';
 
 import { Customer } from '../customers/entities/customer.entity';
 
+import PDFDocument from 'pdfkit';
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -142,5 +144,80 @@ export class OrdersService {
         createdAt: 'DESC',
       },
     });
+  }
+  async generatePdf(id: number) {
+
+    const order =
+      await this.ordersRepository.findOne({
+        where: { id },
+
+        relations: {
+          customer: true,
+          details: {
+            product: true,
+          },
+        },
+      });
+
+    if (!order) {
+      throw new Error(
+        'Order not found',
+      );
+    }
+
+    const doc =
+      new PDFDocument({
+        margin: 50,
+      });
+
+    doc.fontSize(24)
+      .text(
+        'Distribuidora Gustavo',
+      );
+
+    doc.moveDown();
+
+    doc.fontSize(16)
+      .text(`Pedido #${order.id}`);
+
+    doc.text(
+      `Cliente: ${order.customer.name}`,
+    );
+
+    doc.text(
+      `Fecha: ${
+        new Date(
+          order.createdAt,
+        ).toLocaleString()
+      }`,
+    );
+
+    doc.moveDown();
+
+    doc.fontSize(18)
+      .text('Productos');
+
+    doc.moveDown();
+
+    order.details.forEach(
+      (detail) => {
+
+        doc.fontSize(12)
+          .text(
+            `${detail.product.name} | Cantidad: ${detail.quantity} | Precio: $${detail.unitPrice} | Subtotal: $${detail.subtotal}`,
+          );
+      },
+    );
+
+    doc.moveDown();
+
+    doc.fontSize(20)
+      .text(
+        `TOTAL: $${order.total}`,
+      );
+
+    doc.end();
+
+    return doc;
   }
 }

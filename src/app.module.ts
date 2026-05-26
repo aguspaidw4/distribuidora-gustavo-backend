@@ -14,6 +14,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { StockModule } from './stock/stock.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 
 
 @Module({
@@ -62,6 +63,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     PurchasesModule,
 
     DashboardModule,
+
+    ReportsModule,
   ],
 })
 export class AppModule {}

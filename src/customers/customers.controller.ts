@@ -28,9 +28,17 @@ export class CustomersController {
       createCustomerDto,
     );
   }
+  
+  @Get('accounts')
+  findAccountsSummary() {
+    return this.customersService
+      .getAccountsSummary();
+  }
 
   @Get()
   findAll() {
     return this.customersService.findAll();
   }
+
+
 }

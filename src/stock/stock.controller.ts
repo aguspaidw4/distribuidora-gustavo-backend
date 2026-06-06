@@ -19,7 +19,7 @@ export class StockController {
     private readonly stockService: StockService,
   ) {}
 
-  @Post('movements')
+  @Post()
   create(
     @Body()
     createDto: CreateStockMovementDto,
@@ -27,7 +27,7 @@ export class StockController {
     return this.stockService.create(createDto);
   }
 
-  @Get('movements')
+  @Get()
   findAll() {
     return this.stockService.findAll();
   }

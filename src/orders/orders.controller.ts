@@ -5,6 +5,8 @@ import {
   Post,
   UseGuards,
   Param,
+  ParseIntPipe,
+  Res,
 } from '@nestjs/common';
 
 import { OrdersService } from './orders.service';
@@ -15,8 +17,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import type { Response } from 'express';
 
-import { Res } from '@nestjs/common';
-
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
@@ -25,34 +25,24 @@ export class OrdersController {
   ) {}
 
   @Post()
-  create(
-    @Body()
-    createOrderDto: CreateOrderDto,
-  ) {
-    return this.ordersService.create(
-      createOrderDto,
-    );
+  create(@Body() createOrderDto: CreateOrderDto) {
+    return this.ordersService.create(createOrderDto);
   }
 
   @Get()
   findAll() {
     return this.ordersService.findAll();
   }
+
   @Get(':id/pdf')
   async generatePdf(
-    @Param('id') id: string,
-
+    @Param('id', ParseIntPipe) id: number,
     @Res() res: Response,
   ) {
-
     const pdfDoc =
-      await this.ordersService
-        .generatePdf(Number(id));
+      await this.ordersService.generatePdf(id);
 
-    res.setHeader(
-      'Content-Type',
-      'application/pdf',
-    );
+    res.setHeader('Content-Type', 'application/pdf');
 
     res.setHeader(
       'Content-Disposition',

@@ -1,23 +1,18 @@
 import {
   Injectable,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 
 import { InjectRepository } from '@nestjs/typeorm';
-
 import { Repository } from 'typeorm';
 
 import { Order } from './entities/order.entity';
 import { OrderDetail } from './entities/order-detail.entity';
-
 import { Product } from '../products/entities/product.entity';
-
 import { StockMovement } from '../stock/entities/stock-movement.entity';
-
 import { CreateOrderDto } from './dto/create-order.dto';
-
 import { Customer } from '../customers/entities/customer.entity';
-
 import PDFDocument from 'pdfkit';
 
 @Injectable()
@@ -40,92 +35,64 @@ export class OrdersService {
   ) {}
 
   async create(createOrderDto: CreateOrderDto) {
-
     let total = 0;
 
-    const customer =
-      await this.customersRepository.findOne({
-        where: {
-          id: createOrderDto.customerId,
-        },
-      });
+    const customer = await this.customersRepository.findOne({
+      where: { id: createOrderDto.customerId },
+    });
 
     if (!customer) {
-      throw new BadRequestException(
-        'Customer not found',
-      );
+      throw new BadRequestException('Cliente no encontrado');
     }
 
     const details: OrderDetail[] = [];
 
     for (const item of createOrderDto.items) {
-
-      const product =
-        await this.productsRepository.findOne({
-          where: {
-            id: item.productId,
-          },
-        });
+      const product = await this.productsRepository.findOne({
+        where: { id: item.productId },
+      });
 
       if (!product) {
         throw new BadRequestException(
-          `Product ${item.productId} not found`,
+          `Producto #${item.productId} no encontrado`,
         );
       }
 
       if (product.stock < item.quantity) {
         throw new BadRequestException(
-          `Insufficient stock for ${product.name}`,
+          `Stock insuficiente para "${product.name}". Disponible: ${product.stock}`,
         );
       }
 
-      // descontar stock
       product.stock -= item.quantity;
-
       await this.productsRepository.save(product);
 
-      // movimiento stock
-      const movement =
-        this.stockRepository.create({
-          product,
-
-          quantity: item.quantity,
-
-          type: 'SALE',
-
-          reason: 'Order sale',
-        });
-
+      const movement = this.stockRepository.create({
+        product,
+        quantity: item.quantity,
+        type: 'SALE',
+        reason: 'Venta',
+      });
       await this.stockRepository.save(movement);
 
-      const subtotal =
-        Number(product.salePrice) * item.quantity;
-
+      const subtotal = Number(product.salePrice) * item.quantity;
       total += subtotal;
 
-      const detail =
-        this.orderDetailsRepository.create({
-          product,
-
-          quantity: item.quantity,
-
-          unitPrice: product.salePrice,
-
-          subtotal,
-        });
+      const detail = this.orderDetailsRepository.create({
+        product,
+        quantity: item.quantity,
+        unitPrice: product.salePrice,
+        subtotal,
+      });
 
       details.push(detail);
     }
 
     const order = this.ordersRepository.create({
       customer,
-
       total,
-
       paidAmount: 0,
-
       pendingAmount: total,
-
       details,
     });
 
@@ -135,86 +102,219 @@ export class OrdersService {
   findAll() {
     return this.ordersRepository.find({
       relations: {
-        details: {
-          product: true,
-        },
+        details: { product: true },
+        customer: true,
       },
-
-      order: {
-        createdAt: 'DESC',
-      },
+      order: { createdAt: 'DESC' },
     });
   }
+
   async generatePdf(id: number) {
-
-    const order =
-      await this.ordersRepository.findOne({
-        where: { id },
-
-        relations: {
-          customer: true,
-          details: {
-            product: true,
-          },
-        },
-      });
+    const order = await this.ordersRepository.findOne({
+      where: { id },
+      relations: {
+        customer: true,
+        details: { product: true },
+      },
+    });
 
     if (!order) {
-      throw new Error(
-        'Order not found',
-      );
+      throw new NotFoundException(`Pedido #${id} no encontrado`);
     }
 
-    const doc =
-      new PDFDocument({
-        margin: 50,
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+    const primaryColor = '#1a1a2e';
+    const accentColor = '#2563eb';
+    const lightGray = '#f3f4f6';
+    const darkGray = '#6b7280';
+    const pageWidth = 495;
+
+    const formatARS = (value: number | string) =>
+      new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+      }).format(Number(value));
+
+    const fecha = new Date(order.createdAt).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    // ── ENCABEZADO ──
+    doc.rect(0, 0, 595, 90).fill(primaryColor);
+
+    doc
+      .fillColor('#ffffff')
+      .fontSize(26)
+      .font('Helvetica-Bold')
+      .text('Distribuidora Gustavo', 50, 25);
+
+    doc
+      .fontSize(11)
+      .fillColor('#93c5fd')
+      .font('Helvetica')
+      .text(`Pedido #${order.id}`, 50, 57);
+
+    doc
+      .fontSize(10)
+      .fillColor('#93c5fd')
+      .text(`Fecha: ${fecha}`, 50, 72);
+
+    // ── INFO CLIENTE ──
+    doc
+      .fillColor('#111827')
+      .fontSize(13)
+      .font('Helvetica-Bold')
+      .text('Cliente', 50, 108);
+
+    doc
+      .fillColor(darkGray)
+      .fontSize(11)
+      .font('Helvetica')
+      .text(order.customer.name, 50, 125);
+
+    // ── ESTADO ──
+    const statusLabels: Record<string, string> = {
+      PENDING: 'Pendiente de pago',
+      PAID: 'Pagado',
+      PARTIAL: 'Pago parcial',
+      CANCELLED: 'Cancelado',
+    };
+
+    const statusColors: Record<string, string> = {
+      PENDING: '#b45309',
+      PAID: '#166534',
+      PARTIAL: '#1e40af',
+      CANCELLED: '#991b1b',
+    };
+
+    const statusLabel = statusLabels[order.status] ?? order.status;
+    const statusColor = statusColors[order.status] ?? darkGray;
+
+    doc
+      .fillColor(statusColor)
+      .fontSize(11)
+      .font('Helvetica-Bold')
+      .text(statusLabel, 400, 115, { width: 145, align: 'right' });
+
+    // ── TABLA ──
+    const tableTop = 155;
+    const colProducto = 50;
+    const colCantidad = 300;
+    const colPrecio = 370;
+    const colSubtotal = 440;
+    const rowHeight = 30;
+
+    // Encabezado tabla
+    doc.rect(50, tableTop, pageWidth, rowHeight).fill(accentColor);
+
+    doc
+      .fillColor('#ffffff')
+      .fontSize(10)
+      .font('Helvetica-Bold')
+      .text('Producto', colProducto + 8, tableTop + 10)
+      .text('Cant.', colCantidad, tableTop + 10, { width: 60, align: 'center' })
+      .text('Precio', colPrecio, tableTop + 10, { width: 60, align: 'right' })
+      .text('Subtotal', colSubtotal, tableTop + 10, { width: 55, align: 'right' });
+
+    let y = tableTop + rowHeight;
+
+    order.details.forEach((detail, index) => {
+      const isEven = index % 2 === 0;
+
+      doc
+        .rect(50, y, pageWidth, rowHeight)
+        .fill(isEven ? '#ffffff' : lightGray);
+
+      doc
+        .fillColor('#111827')
+        .fontSize(10)
+        .font('Helvetica')
+        .text(detail.product.name, colProducto + 8, y + 10, {
+          width: 240,
+          ellipsis: true,
+        })
+        .text(String(detail.quantity), colCantidad, y + 10, {
+          width: 60,
+          align: 'center',
+        })
+        .text(formatARS(detail.unitPrice), colPrecio, y + 10, {
+          width: 60,
+          align: 'right',
+        })
+        .text(formatARS(detail.subtotal), colSubtotal, y + 10, {
+          width: 55,
+          align: 'right',
+        });
+
+      doc
+        .moveTo(50, y + rowHeight)
+        .lineTo(50 + pageWidth, y + rowHeight)
+        .strokeColor('#e5e7eb')
+        .lineWidth(0.5)
+        .stroke();
+
+      y += rowHeight;
+    });
+
+    // ── TOTALES ──
+    y += 15;
+
+    const drawTotalRow = (
+      label: string,
+      value: string,
+      bold = false,
+      color = '#111827',
+    ) => {
+      doc
+        .fillColor(darkGray)
+        .fontSize(10)
+        .font('Helvetica')
+        .text(label, 350, y, { width: 90, align: 'right' });
+
+      doc
+        .fillColor(color)
+        .fontSize(bold ? 13 : 10)
+        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
+        .text(value, colSubtotal, y, { width: 55, align: 'right' });
+
+      y += bold ? 22 : 18;
+    };
+
+    doc
+      .moveTo(340, y - 5)
+      .lineTo(50 + pageWidth, y - 5)
+      .strokeColor('#e5e7eb')
+      .lineWidth(1)
+      .stroke();
+
+    drawTotalRow('Total:', formatARS(order.total), true, '#111827');
+    drawTotalRow('Pagado:', formatARS(order.paidAmount), false, '#166534');
+    drawTotalRow(
+      'Pendiente:',
+      formatARS(order.pendingAmount),
+      Number(order.pendingAmount) > 0,
+      Number(order.pendingAmount) > 0 ? '#991b1b' : '#166534',
+    );
+
+    // ── PIE ──
+    doc
+      .rect(50, y + 20, pageWidth, 1)
+      .fill('#e5e7eb');
+
+    doc
+      .fillColor(darkGray)
+      .fontSize(9)
+      .font('Helvetica')
+      .text('Distribuidora Gustavo — Gracias por su compra.', 50, y + 30, {
+        align: 'center',
+        width: pageWidth,
       });
-
-    doc.fontSize(24)
-      .text(
-        'Distribuidora Gustavo',
-      );
-
-    doc.moveDown();
-
-    doc.fontSize(16)
-      .text(`Pedido #${order.id}`);
-
-    doc.text(
-      `Cliente: ${order.customer.name}`,
-    );
-
-    doc.text(
-      `Fecha: ${
-        new Date(
-          order.createdAt,
-        ).toLocaleString()
-      }`,
-    );
-
-    doc.moveDown();
-
-    doc.fontSize(18)
-      .text('Productos');
-
-    doc.moveDown();
-
-    order.details.forEach(
-      (detail) => {
-
-        doc.fontSize(12)
-          .text(
-            `${detail.product.name} | Cantidad: ${detail.quantity} | Precio: $${detail.unitPrice} | Subtotal: $${detail.subtotal}`,
-          );
-      },
-    );
-
-    doc.moveDown();
-
-    doc.fontSize(20)
-      .text(
-        `TOTAL: $${order.total}`,
-      );
 
     doc.end();
 

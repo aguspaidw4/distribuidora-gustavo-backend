@@ -4,9 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
-
-import { OneToMany } from 'typeorm';
 
 import { StockMovement } from '../../stock/entities/stock-movement.entity';
 
@@ -15,47 +14,47 @@ export class Product {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({
-    length: 150,
-  })
+  @Column({ length: 150 })
   name: string;
 
-  @Column({
-    type: 'text',
-    nullable: true,
-  })
+  @Column({ type: 'text', nullable: true })
   description: string;
 
-  @Column({
-    type: 'decimal',
-    precision: 10,
-    scale: 2,
-  })
-  purchasePrice: number;
-
-  @Column({
-    type: 'decimal',
-    precision: 5,
-    scale: 2,
-    default: 30,
-  })
+  @Column({ type: 'decimal', precision: 5, scale: 2, default: 30 })
   profitMargin: number;
 
-  @Column({
-    type: 'decimal',
-    precision: 10,
-    scale: 2,
-  })
+  // Precio de compra por presentación (de la distribuidora)
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  purchasePriceUnit: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  purchasePriceTira: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  purchasePriceCaja: number | null;
+
+  // Precio de venta por presentación (calculado con margen)
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  salePriceUnit: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  salePriceTira: number | null;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  salePriceCaja: number | null;
+
+  // Para mantener compatibilidad con pedidos (usamos salePriceUnit o el primero disponible)
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   salePrice: number;
 
-  @Column({
-    default: 0,
-  })
+  // Campo legacy — ya no se usa pero se mantiene para no romper migraciones
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  purchasePrice: number | null;
+
+  @Column({ default: 0 })
   stock: number;
 
-  @Column({
-    default: true,
-  })
+  @Column({ default: true })
   active: boolean;
 
   @CreateDateColumn()

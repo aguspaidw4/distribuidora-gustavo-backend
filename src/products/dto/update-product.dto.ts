@@ -3,6 +3,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 
@@ -18,12 +19,23 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  purchasePrice?: number;
+  @Max(500)
+  profitMargin?: number;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  profitMargin?: number;
+  purchasePriceUnit?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePriceTira?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePriceCaja?: number | null;
 
   @IsOptional()
   @IsNumber()

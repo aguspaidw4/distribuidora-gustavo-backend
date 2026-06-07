@@ -11,7 +11,6 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import PDFDocument from 'pdfkit';
 
-
 @Injectable()
 export class ProductsService {
   constructor(
@@ -19,14 +18,43 @@ export class ProductsService {
     private productsRepository: Repository<Product>,
   ) {}
 
-  async create(createProductDto: CreateProductDto) {
+  private calcSalePrice(
+    purchasePrice: number | null | undefined,
+    profitMargin: number,
+  ): number | null {
+    if (!purchasePrice) return null;
+    return purchasePrice * (1 + profitMargin / 100);
+  }
+
+  async create(dto: CreateProductDto) {
+    const hasAtLeastOne =
+      dto.purchasePriceUnit ||
+      dto.purchasePriceTira ||
+      dto.purchasePriceCaja;
+
+    if (!hasAtLeastOne) {
+      throw new BadRequestException(
+        'Ingresá al menos un precio de presentación (Unidad, Tira o Caja)',
+      );
+    }
+
+    const margin = dto.profitMargin;
+
+    const salePriceUnit = this.calcSalePrice(dto.purchasePriceUnit, margin);
+    const salePriceTira = this.calcSalePrice(dto.purchasePriceTira, margin);
+    const salePriceCaja = this.calcSalePrice(dto.purchasePriceCaja, margin);
+
+    // salePrice general = el primero disponible (para compatibilidad con pedidos)
     const salePrice =
-      createProductDto.purchasePrice *
-      (1 + createProductDto.profitMargin / 100);
+      salePriceUnit ?? salePriceTira ?? salePriceCaja ?? 0;
 
     const product = this.productsRepository.create({
-      ...createProductDto,
+      ...dto,
+      salePriceUnit,
+      salePriceTira,
+      salePriceCaja,
       salePrice,
+      purchasePrice: dto.purchasePriceUnit ?? dto.purchasePriceTira ?? dto.purchasePriceCaja ?? 0,
     });
 
     return this.productsRepository.save(product);
@@ -44,9 +72,7 @@ export class ProductsService {
     });
 
     if (!product) {
-      throw new NotFoundException(
-        `Producto #${id} no encontrado`,
-      );
+      throw new NotFoundException(`Producto #${id} no encontrado`);
     }
 
     return product;
@@ -70,28 +96,26 @@ export class ProductsService {
     return this.productsRepository.remove(product);
   }
 
-  async update(id: number, updateProductDto: UpdateProductDto) {
+  async update(id: number, dto: UpdateProductDto) {
     const product = await this.findOne(id);
 
-    Object.assign(product, updateProductDto);
+    Object.assign(product, dto);
 
-    if (
-      updateProductDto.purchasePrice !== undefined ||
-      updateProductDto.profitMargin !== undefined
-    ) {
-      product.salePrice =
-        Number(product.purchasePrice) *
-        (1 + Number(product.profitMargin) / 100);
-    }
+    const margin = Number(product.profitMargin);
+
+    product.salePriceUnit = this.calcSalePrice(product.purchasePriceUnit, margin);
+    product.salePriceTira = this.calcSalePrice(product.purchasePriceTira, margin);
+    product.salePriceCaja = this.calcSalePrice(product.purchasePriceCaja, margin);
+
+    product.salePrice =
+      product.salePriceUnit ?? product.salePriceTira ?? product.salePriceCaja ?? 0;
 
     return this.productsRepository.save(product);
   }
 
   async generatePriceListPdf(productIds: number[]) {
     if (!productIds || productIds.length === 0) {
-      throw new BadRequestException(
-        'Seleccioná al menos un producto',
-      );
+      throw new BadRequestException('Seleccioná al menos un producto');
     }
 
     const products = await this.productsRepository.findBy({
@@ -104,36 +128,24 @@ export class ProductsService {
       );
     }
 
-    // Ordenar por nombre
     products.sort((a, b) => a.name.localeCompare(b.name));
 
-    const doc = new PDFDocument({
-      margin: 50,
-      size: 'A4',
-    });
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
 
     const primaryColor = '#1a1a2e';
     const accentColor = '#2563eb';
     const lightGray = '#f3f4f6';
     const darkGray = '#6b7280';
-    const pageWidth = 495; // A4 595 - 2*50 margins
+    const pageWidth = 495;
 
-    // ── ENCABEZADO ──
-    doc
-      .rect(0, 0, 595, 90)
-      .fill(primaryColor);
-
-    doc
-      .fillColor('#ffffff')
-      .fontSize(26)
-      .font('Helvetica-Bold')
-      .text('Distribuidora Gustavo', 50, 25);
-
-    doc
-      .fontSize(11)
-      .fillColor('#93c5fd')
-      .font('Helvetica')
-      .text('Lista de Precios', 50, 57);
+    const formatARS = (value: number | string | null) =>
+      value !== null && value !== undefined
+        ? new Intl.NumberFormat('es-AR', {
+            style: 'currency',
+            currency: 'ARS',
+            minimumFractionDigits: 2,
+          }).format(Number(value))
+        : '—';
 
     const fecha = new Date().toLocaleDateString('es-AR', {
       day: '2-digit',
@@ -141,105 +153,89 @@ export class ProductsService {
       year: 'numeric',
     });
 
-    doc
-      .fontSize(10)
-      .fillColor('#93c5fd')
+    // ── ENCABEZADO ──
+    doc.rect(0, 0, 595, 90).fill(primaryColor);
+    doc.fillColor('#ffffff').fontSize(26).font('Helvetica-Bold')
+      .text('Distribuidora Gustavo', 50, 25);
+    doc.fontSize(11).fillColor('#93c5fd').font('Helvetica')
+      .text('Lista de Precios', 50, 57);
+    doc.fontSize(10).fillColor('#93c5fd')
       .text(`Fecha: ${fecha}`, 50, 72);
-
-    // ── SUBTÍTULO ──
-    doc
-      .fillColor(darkGray)
-      .fontSize(10)
-      .font('Helvetica')
+    doc.fillColor(darkGray).fontSize(10).font('Helvetica')
       .text(
         `${products.length} producto${products.length !== 1 ? 's' : ''}`,
-        50,
-        105,
+        50, 105,
       );
 
     // ── TABLA ──
     const tableTop = 125;
-    const col1 = 50;
-    const col2 = 370;
-    const rowHeight = 32;
+    const colProducto = 50;
+    const colUnidad = 245;
+    const colTira = 335;
+    const colCaja = 420;
+    const rowHeight = 30;
 
-    // Encabezado tabla
-    doc
-      .rect(50, tableTop, pageWidth, rowHeight)
-      .fill(accentColor);
+    doc.rect(50, tableTop, pageWidth, rowHeight).fill(accentColor);
+    doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+      .text('Producto', colProducto + 8, tableTop + 10)
+      .text('Unidad', colUnidad, tableTop + 10, { width: 80, align: 'right' })
+      .text('Tira', colTira, tableTop + 10, { width: 75, align: 'right' })
+      .text('Caja', colCaja, tableTop + 10, { width: 75, align: 'right' });
 
-    doc
-      .fillColor('#ffffff')
-      .fontSize(11)
-      .font('Helvetica-Bold')
-      .text('Producto', col1 + 10, tableTop + 10)
-      .text('Precio', col2, tableTop + 10, {
-        width: 125,
-        align: 'right',
-      });
-
-    // Filas
     let y = tableTop + rowHeight;
 
     products.forEach((product, index) => {
       const isEven = index % 2 === 0;
-
-      doc
-        .rect(50, y, pageWidth, rowHeight)
+      doc.rect(50, y, pageWidth, rowHeight)
         .fill(isEven ? '#ffffff' : lightGray);
 
-      doc
-        .fillColor('#111827')
-        .fontSize(11)
-        .font('Helvetica')
-        .text(product.name, col1 + 10, y + 10, {
-          width: 290,
-          ellipsis: true,
+      doc.fillColor('#111827').fontSize(10).font('Helvetica')
+        .text(product.name, colProducto + 8, y + 10, {
+          width: 185, ellipsis: true,
         });
 
-      const precio = new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS',
-        minimumFractionDigits: 2,
-      }).format(Number(product.salePrice));
+      // Unidad
+      if (product.salePriceUnit) {
+        doc.fillColor('#166534').font('Helvetica-Bold')
+          .text(formatARS(product.salePriceUnit), colUnidad, y + 10, { width: 80, align: 'right' });
+      } else {
+        doc.fillColor(darkGray).font('Helvetica')
+          .text('—', colUnidad, y + 10, { width: 80, align: 'right' });
+      }
 
-      doc
-        .fillColor('#166534')
-        .fontSize(11)
-        .font('Helvetica-Bold')
-        .text(precio, col2, y + 10, {
-          width: 125,
-          align: 'right',
-        });
+      // Tira
+      if (product.salePriceTira) {
+        doc.fillColor('#1e40af').font('Helvetica-Bold')
+          .text(formatARS(product.salePriceTira), colTira, y + 10, { width: 75, align: 'right' });
+      } else {
+        doc.fillColor(darkGray).font('Helvetica')
+          .text('—', colTira, y + 10, { width: 75, align: 'right' });
+      }
 
-      doc
-        .moveTo(50, y + rowHeight)
-        .lineTo(50 + pageWidth, y + rowHeight)
-        .strokeColor('#e5e7eb')
-        .lineWidth(0.5)
-        .stroke();
+      // Caja
+      if (product.salePriceCaja) {
+        doc.fillColor('#6d28d9').font('Helvetica-Bold')
+          .text(formatARS(product.salePriceCaja), colCaja, y + 10, { width: 75, align: 'right' });
+      } else {
+        doc.fillColor(darkGray).font('Helvetica')
+          .text('—', colCaja, y + 10, { width: 75, align: 'right' });
+      }
+
+      doc.moveTo(50, y + rowHeight).lineTo(50 + pageWidth, y + rowHeight)
+        .strokeColor('#e5e7eb').lineWidth(0.5).stroke();
 
       y += rowHeight;
     });
 
-    // ── PIE ──
-    doc
-      .rect(50, y + 20, pageWidth, 1)
-      .fill('#e5e7eb');
-
-    doc
-      .fillColor(darkGray)
-      .fontSize(9)
-      .font('Helvetica')
+    doc.rect(50, y + 20, pageWidth, 1).fill('#e5e7eb');
+    doc.fillColor(darkGray).fontSize(9).font('Helvetica')
       .text(
         'Los precios pueden estar sujetos a cambios sin previo aviso.',
-        50,
-        y + 30,
+        50, y + 30,
         { align: 'center', width: pageWidth },
       );
 
     doc.end();
-
     return doc;
   }
 }

@@ -44,19 +44,27 @@ export class CustomersService {
   findAll() {
     return this.customersRepository.find({
       order: { createdAt: 'DESC' },
+      relations: { user: true },
     });
   }
 
   async findOne(id: number) {
     const customer = await this.customersRepository.findOne({
       where: { id },
+      relations: { user: true },
     });
-
     if (!customer) {
       throw new NotFoundException(`Cliente #${id} no encontrado`);
     }
-
     return customer;
+  }
+
+  // Buscar el cliente vinculado a un usuario
+  async findByUserId(userId: number): Promise<Customer | null> {
+    return this.customersRepository.findOne({
+      where: { userId },
+      relations: { orders: { details: { product: true } } },
+    });
   }
 
   async update(id: number, dto: Partial<CreateCustomerDto>) {
@@ -65,10 +73,29 @@ export class CustomersService {
     return this.customersRepository.save(customer);
   }
 
+  // Vincular o desvincular un usuario a un cliente
+  async linkUser(customerId: number, userId: number | null) {
+    const customer = await this.findOne(customerId);
+
+    // Verificar que el userId no esté ya vinculado a otro cliente
+    if (userId !== null) {
+      const existing = await this.customersRepository.findOne({
+        where: { userId },
+      });
+      if (existing && existing.id !== customerId) {
+        throw new BadRequestException(
+          `Este usuario ya está vinculado al cliente "${existing.name}"`,
+        );
+      }
+    }
+
+    customer.userId = userId;
+    return this.customersRepository.save(customer);
+  }
+
   async remove(id: number) {
     const customer = await this.findOne(id);
 
-    // Verificar si tiene pedidos asociados
     const hasOrders = await this.customersRepository
       .createQueryBuilder('customer')
       .innerJoin('customer.orders', 'order')

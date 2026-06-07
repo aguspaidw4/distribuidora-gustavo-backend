@@ -4,7 +4,6 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
 
 @Entity('suppliers')
@@ -15,11 +14,17 @@ export class Supplier {
   @Column({ length: 150 })
   name: string;
 
-  @Column({ nullable: true })
-  phone: string;
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  phone: string | null;
 
-  @Column({ nullable: true })
-  notes: string;
+  @Column({ type: 'varchar', length: 11, nullable: true })
+  cuit: string | null;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  address: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
 
   @Column({ default: true })
   active: boolean;

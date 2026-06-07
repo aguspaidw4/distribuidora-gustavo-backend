@@ -75,13 +75,17 @@ export class OrdersService {
       });
       await this.stockRepository.save(movement);
 
-      const subtotal = Number(product.salePrice) * item.quantity;
+      // Usar el precio enviado desde el frontend, o el salePrice como fallback
+      const unitPrice = item.unitPrice ?? Number(product.salePrice);
+      const presentation = item.presentation ?? 'UNIDAD';
+      const subtotal = unitPrice * item.quantity;
       total += subtotal;
 
       const detail = this.orderDetailsRepository.create({
         product,
         quantity: item.quantity,
-        unitPrice: product.salePrice,
+        presentation,
+        unitPrice,
         subtotal,
       });
 
@@ -147,35 +151,17 @@ export class OrdersService {
 
     // ── ENCABEZADO ──
     doc.rect(0, 0, 595, 90).fill(primaryColor);
-
-    doc
-      .fillColor('#ffffff')
-      .fontSize(26)
-      .font('Helvetica-Bold')
+    doc.fillColor('#ffffff').fontSize(26).font('Helvetica-Bold')
       .text('Distribuidora Gustavo', 50, 25);
-
-    doc
-      .fontSize(11)
-      .fillColor('#93c5fd')
-      .font('Helvetica')
+    doc.fontSize(11).fillColor('#93c5fd').font('Helvetica')
       .text(`Pedido #${order.id}`, 50, 57);
-
-    doc
-      .fontSize(10)
-      .fillColor('#93c5fd')
+    doc.fontSize(10).fillColor('#93c5fd')
       .text(`Fecha: ${fecha}`, 50, 72);
 
     // ── INFO CLIENTE ──
-    doc
-      .fillColor('#111827')
-      .fontSize(13)
-      .font('Helvetica-Bold')
+    doc.fillColor('#111827').fontSize(13).font('Helvetica-Bold')
       .text('Cliente', 50, 108);
-
-    doc
-      .fillColor(darkGray)
-      .fontSize(11)
-      .font('Helvetica')
+    doc.fillColor(darkGray).fontSize(11).font('Helvetica')
       .text(order.customer.name, 50, 125);
 
     // ── ESTADO ──
@@ -185,7 +171,6 @@ export class OrdersService {
       PARTIAL: 'Pago parcial',
       CANCELLED: 'Cancelado',
     };
-
     const statusColors: Record<string, string> = {
       PENDING: '#b45309',
       PAID: '#166534',
@@ -193,105 +178,58 @@ export class OrdersService {
       CANCELLED: '#991b1b',
     };
 
-    const statusLabel = statusLabels[order.status] ?? order.status;
-    const statusColor = statusColors[order.status] ?? darkGray;
-
-    doc
-      .fillColor(statusColor)
-      .fontSize(11)
-      .font('Helvetica-Bold')
-      .text(statusLabel, 400, 115, { width: 145, align: 'right' });
+    doc.fillColor(statusColors[order.status] ?? darkGray)
+      .fontSize(11).font('Helvetica-Bold')
+      .text(statusLabels[order.status] ?? order.status, 380, 115, { width: 165, align: 'right' });
 
     // ── TABLA ──
     const tableTop = 155;
-    const colProducto = 50;
-    const colCantidad = 300;
-    const colPrecio = 370;
-    const colSubtotal = 440;
     const rowHeight = 30;
+    const colProducto = 50;
+    const colPresentacion = 255;
+    const colCantidad = 320;
+    const colPrecio = 370;
+    const colSubtotal = 430;
 
-    // Encabezado tabla
     doc.rect(50, tableTop, pageWidth, rowHeight).fill(accentColor);
-
-    doc
-      .fillColor('#ffffff')
-      .fontSize(10)
-      .font('Helvetica-Bold')
-      .text('Producto', colProducto + 8, tableTop + 10)
-      .text('Cant.', colCantidad, tableTop + 10, { width: 60, align: 'center' })
-      .text('Precio', colPrecio, tableTop + 10, { width: 60, align: 'right' })
-      .text('Subtotal', colSubtotal, tableTop + 10, { width: 55, align: 'right' });
+    doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
+      .text('Producto',     colProducto + 8, tableTop + 10, { width: 195 })
+      .text('Present.',     colPresentacion, tableTop + 10, { width: 55, align: 'center' })
+      .text('Cant.',        colCantidad,     tableTop + 10, { width: 45, align: 'center' })
+      .text('P. Unit.',     colPrecio,       tableTop + 10, { width: 55, align: 'right' })
+      .text('Subtotal',     colSubtotal,     tableTop + 10, { width: 115, align: 'right' });
 
     let y = tableTop + rowHeight;
 
     order.details.forEach((detail, index) => {
       const isEven = index % 2 === 0;
+      doc.rect(50, y, pageWidth, rowHeight).fill(isEven ? '#ffffff' : lightGray);
 
-      doc
-        .rect(50, y, pageWidth, rowHeight)
-        .fill(isEven ? '#ffffff' : lightGray);
+      doc.fillColor('#111827').fontSize(10).font('Helvetica')
+        .text(detail.product.name, colProducto + 8, y + 10, { width: 195, ellipsis: true })
+        .text(detail.presentation ?? 'UNIDAD', colPresentacion, y + 10, { width: 55, align: 'center' })
+        .text(String(detail.quantity), colCantidad, y + 10, { width: 45, align: 'center' })
+        .text(formatARS(detail.unitPrice), colPrecio, y + 10, { width: 55, align: 'right' })
+        .text(formatARS(detail.subtotal), colSubtotal, y + 10, { width: 115, align: 'right' });
 
-      doc
-        .fillColor('#111827')
-        .fontSize(10)
-        .font('Helvetica')
-        .text(detail.product.name, colProducto + 8, y + 10, {
-          width: 240,
-          ellipsis: true,
-        })
-        .text(String(detail.quantity), colCantidad, y + 10, {
-          width: 60,
-          align: 'center',
-        })
-        .text(formatARS(detail.unitPrice), colPrecio, y + 10, {
-          width: 60,
-          align: 'right',
-        })
-        .text(formatARS(detail.subtotal), colSubtotal, y + 10, {
-          width: 55,
-          align: 'right',
-        });
-
-      doc
-        .moveTo(50, y + rowHeight)
-        .lineTo(50 + pageWidth, y + rowHeight)
-        .strokeColor('#e5e7eb')
-        .lineWidth(0.5)
-        .stroke();
+      doc.moveTo(50, y + rowHeight).lineTo(545, y + rowHeight)
+        .strokeColor('#e5e7eb').lineWidth(0.5).stroke();
 
       y += rowHeight;
     });
 
     // ── TOTALES ──
     y += 15;
+    doc.moveTo(310, y - 5).lineTo(545, y - 5)
+      .strokeColor('#e5e7eb').lineWidth(1).stroke();
 
-    const drawTotalRow = (
-      label: string,
-      value: string,
-      bold = false,
-      color = '#111827',
-    ) => {
-      doc
-        .fillColor(darkGray)
-        .fontSize(10)
-        .font('Helvetica')
-        .text(label, 350, y, { width: 90, align: 'right' });
-
-      doc
-        .fillColor(color)
-        .fontSize(bold ? 13 : 10)
-        .font(bold ? 'Helvetica-Bold' : 'Helvetica')
-        .text(value, colSubtotal, y, { width: 55, align: 'right' });
-
+    const drawTotalRow = (label: string, value: string, bold = false, color = '#111827') => {
+      doc.fillColor(darkGray).fontSize(10).font('Helvetica')
+        .text(label, 310, y, { width: 100, align: 'right' });
+      doc.fillColor(color).fontSize(bold ? 12 : 10).font(bold ? 'Helvetica-Bold' : 'Helvetica')
+        .text(value, colSubtotal, y, { width: 115, align: 'right' });
       y += bold ? 22 : 18;
     };
-
-    doc
-      .moveTo(340, y - 5)
-      .lineTo(50 + pageWidth, y - 5)
-      .strokeColor('#e5e7eb')
-      .lineWidth(1)
-      .stroke();
 
     drawTotalRow('Total:', formatARS(order.total), true, '#111827');
     drawTotalRow('Pagado:', formatARS(order.paidAmount), false, '#166534');
@@ -303,21 +241,13 @@ export class OrdersService {
     );
 
     // ── PIE ──
-    doc
-      .rect(50, y + 20, pageWidth, 1)
-      .fill('#e5e7eb');
-
-    doc
-      .fillColor(darkGray)
-      .fontSize(9)
-      .font('Helvetica')
+    doc.rect(50, y + 20, pageWidth, 1).fill('#e5e7eb');
+    doc.fillColor(darkGray).fontSize(9).font('Helvetica')
       .text('Distribuidora Gustavo — Gracias por su compra.', 50, y + 30, {
-        align: 'center',
-        width: pageWidth,
+        align: 'center', width: pageWidth,
       });
 
     doc.end();
-
     return doc;
   }
 }

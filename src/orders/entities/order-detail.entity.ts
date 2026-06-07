@@ -6,7 +6,6 @@ import {
 } from 'typeorm';
 
 import { Order } from './order.entity';
-
 import { Product } from '../../products/entities/product.entity';
 
 @Entity('order_details')
@@ -14,10 +13,7 @@ export class OrderDetail {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(
-    () => Order,
-    (order) => order.details,
-  )
+  @ManyToOne(() => Order, (order) => order.details)
   order: Order;
 
   @ManyToOne(() => Product)
@@ -26,17 +22,12 @@ export class OrderDetail {
   @Column()
   quantity: number;
 
-  @Column({
-    type: 'decimal',
-    precision: 10,
-    scale: 2,
-  })
+  @Column({ type: 'varchar', length: 20, default: 'UNIDAD' })
+  presentation: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
   unitPrice: number;
 
-  @Column({
-    type: 'decimal',
-    precision: 10,
-    scale: 2,
-  })
+  @Column({ type: 'decimal', precision: 10, scale: 2 })
   subtotal: number;
 }

@@ -6,7 +6,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Supplier } from './entities/supplier.entity';
 
-import { CreateSupplierDto } from './dto/create-supplier.dto';
+export class CreateSupplierDto {
+  name: string;
+  phone?: string | null;
+  cuit?: string | null;
+  address?: string | null;
+  notes?: string | null;
+}
 
 @Injectable()
 export class SuppliersService {

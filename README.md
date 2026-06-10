@@ -1,98 +1,160 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Distribuidora Gustavo — Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST para la gestión de la distribuidora: usuarios, productos, pedidos, pagos, stock, compras y reportes. Construida con NestJS, TypeORM y MySQL.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Tecnologías
 
-## Description
+- **NestJS 11** + **TypeScript** — Framework y tipado
+- **TypeORM** — ORM con soporte para MySQL
+- **MySQL 8** — Base de datos relacional
+- **Passport.js + JWT** — Autenticación
+- **bcrypt** — Hash de contraseñas
+- **PDFKit** — Generación de PDFs (reportes/remitos)
+- **class-validator** — Validación de DTOs
+- **Jest** — Testing unitario y e2e
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Requisitos previos
 
-## Project setup
+- Node.js 20+
+- npm 9+
+- MySQL 8 (o Docker)
+
+## Instalación y ejecución
 
 ```bash
-$ npm install
+# Instalar dependencias
+npm install
+
+# Desarrollo con hot-reload
+npm run start:dev
+
+# Build de producción
+npm run build
+
+# Producción
+npm run start:prod
 ```
 
-## Compile and run the project
+## Variables de entorno
+
+Copiar `.env.example` a `.env` y completar los valores:
+
+```env
+PORT=3000
+
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=distribuidora_user
+DB_PASSWORD=tu_password
+DB_NAME=distribuidora_db
+
+JWT_SECRET=tu_secreto_jwt
+JWT_EXPIRES=7d
+```
+
+## Base de datos con Docker
+
+El proyecto incluye un `docker-compose.yml` con MySQL 8 preconfigurado:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+# Levantar solo la base de datos
+docker-compose up -d distribuidora_mysql
 ```
 
-## Run tests
+Credenciales por defecto (solo para desarrollo):
+- Base de datos: `distribuidora_db`
+- Usuario: `distribuidora_user`
+- Puerto: `3306`
+
+> **Nota:** `synchronize: true` está habilitado — TypeORM sincroniza el esquema automáticamente. Desactivar en producción.
+
+## Estructura del proyecto
+
+```
+src/
+├── auth/                  # Login, JWT strategy, guards y decoradores de roles
+├── users/                 # CRUD de usuarios y entidad User
+├── products/              # CRUD de productos con precios por unidad/tira/caja
+├── categories/            # Categorías de productos
+├── suppliers/             # Proveedores
+├── customers/             # Clientes vinculados a usuarios
+├── orders/                # Pedidos y detalle de pedidos
+├── payments/              # Pagos asociados a pedidos
+├── stock/                 # Movimientos de stock
+├── purchases/             # Compras a proveedores
+├── dashboard/             # Métricas y resumen para el panel principal
+├── reports/               # Generación de reportes en PDF
+├── app.module.ts          # Módulo raíz con configuración de TypeORM y ConfigModule
+└── main.ts                # Bootstrap, CORS, ValidationPipe global
+```
+
+## Autenticación y roles
+
+**Endpoint de login:**
+```http
+POST /auth/login
+Content-Type: application/json
+
+{ "email": "admin@ejemplo.com", "password": "password123" }
+```
+
+Respuesta:
+```json
+{ "access_token": "<jwt>" }
+```
+
+El JWT contiene: `{ sub: userId, email, role }`
+
+**Roles disponibles:**
+
+| Rol    | Descripción                                              |
+|--------|----------------------------------------------------------|
+| ADMIN  | Acceso completo                                          |
+| OWNER  | Gestión operativa (productos, stock, compras, pedidos)  |
+| CLIENT | Acceso solo a sus propios pedidos                        |
+
+Las rutas protegidas usan `@UseGuards(JwtAuthGuard, RolesGuard)` y `@Roles('ADMIN', 'OWNER')`.
+
+## Modelo de datos principal
+
+```
+User ──< Customer ──< Order ──< OrderDetail >── Product
+                        │
+                        └──< Payment
+
+Product ──< StockMovement
+Product >── Category
+Product >── Supplier
+Purchase >── Supplier
+```
+
+**Producto:** soporta precios múltiples (unidad, tira, caja) con margen de ganancia configurable (default 30%).
+
+**Tipo fiscal del usuario:** `CONSUMIDOR_FINAL | MONOTRIBUTISTA | RESPONSABLE_INSCRIPTO`
+
+## Scripts disponibles
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run start:dev    # Desarrollo con watch
+npm run build        # Compilar a dist/
+npm run start:prod   # Producción
+npm run test         # Tests unitarios
+npm run test:e2e     # Tests end-to-end
+npm run test:cov     # Cobertura de tests
+npm run lint         # ESLint con auto-fix
+npm run format       # Prettier
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Docker
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Construir imagen del backend
+docker build -t distribuidora-backend .
+
+# Correr en puerto 3000
+docker run -p 3000:3000 --env-file .env distribuidora-backend
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## CORS
 
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+En desarrollo, el backend acepta requests de `http://localhost:5173` (Vite dev server). Modificar en `main.ts` para otros orígenes.

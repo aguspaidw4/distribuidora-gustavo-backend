@@ -9,8 +9,7 @@ import { Purchase, PurchaseDetail } from './entities/purchase.entity';
 import { Product } from '../products/entities/product.entity';
 import { Supplier } from '../suppliers/entities/supplier.entity';
 import { StockMovement } from '../stock/entities/stock-movement.entity';
-import { CreatePurchaseDto, PurchaseItemDto } from './dto/create-purchase.dto';
-
+import { CreatePurchaseDto } from './dto/create-purchase.dto';
 
 @Injectable()
 export class PurchasesService {
@@ -37,15 +36,11 @@ export class PurchasesService {
     });
 
     if (!supplier) {
-      throw new NotFoundException(
-        `Proveedor #${dto.supplierId} no encontrado`,
-      );
+      throw new NotFoundException(`Proveedor #${dto.supplierId} no encontrado`);
     }
 
     if (!dto.items || dto.items.length === 0) {
-      throw new BadRequestException(
-        'La compra debe tener al menos un producto',
-      );
+      throw new BadRequestException('La compra debe tener al menos un producto');
     }
 
     let total = 0;
@@ -57,27 +52,21 @@ export class PurchasesService {
       });
 
       if (!product) {
-        throw new BadRequestException(
-          `Producto #${item.productId} no encontrado`,
-        );
+        throw new BadRequestException(`Producto #${item.productId} no encontrado`);
       }
 
       const subtotal = item.unitCost * item.quantity;
       total += subtotal;
 
-      // Sumar stock
       product.stock += item.quantity;
 
-      // Actualizar precio de compra y recalcular venta si se indicó
       if (item.updatePrice) {
         product.purchasePrice = item.unitCost;
-        product.salePrice =
-          item.unitCost * (1 + Number(product.profitMargin) / 100);
+        product.salePrice = item.unitCost * (1 + Number(product.profitMargin) / 100);
       }
 
       await this.productsRepository.save(product);
 
-      // Registrar movimiento de stock
       const movement = this.stockRepository.create({
         product,
         quantity: item.quantity,
@@ -103,8 +92,7 @@ export class PurchasesService {
       Math.round(total * 100),
     ) / 100;
 
-    const pendingAmount =
-      Math.round((total - paidAmount) * 100) / 100;
+    const pendingAmount = Math.round((total - paidAmount) * 100) / 100;
 
     const purchase = this.purchasesRepository.create({
       supplier,
@@ -120,10 +108,7 @@ export class PurchasesService {
 
   findAll() {
     return this.purchasesRepository.find({
-      relations: {
-        supplier: true,
-        details: true,
-      },
+      relations: { supplier: true, details: true },
       order: { createdAt: 'DESC' },
     });
   }
@@ -131,10 +116,7 @@ export class PurchasesService {
   async findOne(id: number) {
     const purchase = await this.purchasesRepository.findOne({
       where: { id },
-      relations: {
-        supplier: true,
-        details: true,
-      },
+      relations: { supplier: true, details: true },
     });
 
     if (!purchase) {
@@ -142,5 +124,34 @@ export class PurchasesService {
     }
 
     return purchase;
+  }
+
+  async registerPayment(id: number, amount: number) {
+    const purchase = await this.findOne(id);
+
+    const pending = Math.round(Number(purchase.pendingAmount) * 100);
+    const incoming = Math.round(amount * 100);
+
+    if (pending <= 0) {
+      throw new BadRequestException('Esta compra ya está completamente pagada');
+    }
+
+    if (incoming <= 0) {
+      throw new BadRequestException('El monto debe ser mayor a 0');
+    }
+
+    if (incoming > pending) {
+      throw new BadRequestException(
+        `El monto supera el pendiente de $${Number(purchase.pendingAmount).toFixed(2)}`,
+      );
+    }
+
+    const newPaidCents = Math.round(Number(purchase.paidAmount) * 100) + incoming;
+    const newPendingCents = Math.round(Number(purchase.total) * 100) - newPaidCents;
+
+    purchase.paidAmount = newPaidCents / 100;
+    purchase.pendingAmount = newPendingCents <= 0 ? 0 : newPendingCents / 100;
+
+    return this.purchasesRepository.save(purchase);
   }
 }

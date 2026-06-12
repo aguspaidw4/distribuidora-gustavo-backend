@@ -17,6 +17,15 @@ export class UpdateProductDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  weight?: number | null;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(500)

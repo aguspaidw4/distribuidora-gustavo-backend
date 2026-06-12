@@ -71,7 +71,7 @@ export class OrdersService {
         product,
         quantity: item.quantity,
         type: 'SALE',
-        reason: 'Venta',
+        reason: `Venta — ${customer.name}`,
       });
       await this.stockRepository.save(movement);
 

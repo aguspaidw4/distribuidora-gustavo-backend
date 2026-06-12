@@ -4,7 +4,6 @@ import {
   IsString,
   Max,
   Min,
-  ValidateIf,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -15,12 +14,20 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  weight?: number | null;
+
   @IsNumber()
   @Min(0, { message: 'El margen no puede ser negativo' })
   @Max(500, { message: 'El margen no puede superar el 500%' })
   profitMargin: number;
 
-  // Al menos uno de los tres debe estar presente (validado en el service)
   @IsOptional()
   @IsNumber()
   @Min(0)

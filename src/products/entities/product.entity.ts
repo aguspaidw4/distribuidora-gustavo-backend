@@ -20,10 +20,17 @@ export class Product {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  // Categoría opcional — ej: "Medicamentos", "Limpieza", "Alimentos"
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  category: string | null;
+
+  // Peso en gramos (opcional)
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  weight: number | null;
+
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 30 })
   profitMargin: number;
 
-  // Precio de compra por presentación (de la distribuidora)
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   purchasePriceUnit: number | null;
 
@@ -33,7 +40,6 @@ export class Product {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   purchasePriceCaja: number | null;
 
-  // Precio de venta por presentación (calculado con margen)
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   salePriceUnit: number | null;
 
@@ -43,11 +49,9 @@ export class Product {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   salePriceCaja: number | null;
 
-  // Para mantener compatibilidad con pedidos (usamos salePriceUnit o el primero disponible)
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   salePrice: number;
 
-  // Campo legacy — ya no se usa pero se mantiene para no romper migraciones
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   purchasePrice: number | null;
 
@@ -63,9 +67,6 @@ export class Product {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @OneToMany(
-    () => StockMovement,
-    (movement) => movement.product,
-  )
+  @OneToMany(() => StockMovement, (movement) => movement.product)
   stockMovements: StockMovement[];
 }

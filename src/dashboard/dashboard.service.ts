@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
-
 import { InjectRepository } from '@nestjs/typeorm';
-
 import { Repository } from 'typeorm';
-
 import { Order } from '../orders/entities/order.entity';
-
 import { Product } from '../products/entities/product.entity';
-
 import { Customer } from '../customers/entities/customer.entity';
+import { Purchase } from '../purchases/entities/purchase.entity';
 
 @Injectable()
 export class DashboardService {
   constructor(
-
     @InjectRepository(Order)
     private ordersRepository: Repository<Order>,
 
@@ -22,66 +17,41 @@ export class DashboardService {
 
     @InjectRepository(Customer)
     private customersRepository: Repository<Customer>,
+
+    @InjectRepository(Purchase)
+    private purchasesRepository: Repository<Purchase>,
   ) {}
 
   async getSummary() {
+    const salesResult = await this.ordersRepository
+      .createQueryBuilder('order')
+      .select('SUM(order.total)', 'totalSales')
+      .getRawOne();
 
-    // ventas totales
-    const salesResult =
-      await this.ordersRepository
-        .createQueryBuilder('order')
+    const totalOrders = await this.ordersRepository.count();
+    const totalCustomers = await this.customersRepository.count();
 
-        .select(
-          'SUM(order.total)',
-          'totalSales',
-        )
+    const lowStockProducts = await this.productsRepository.count({
+      where: { stock: 0 },
+    });
 
-        .getRawOne();
+    const pendingPaymentsResult = await this.ordersRepository
+      .createQueryBuilder('order')
+      .select('SUM(order.pendingAmount)', 'pendingPayments')
+      .getRawOne();
 
-    // total pedidos
-    const totalOrders =
-      await this.ordersRepository.count();
-
-    // total clientes
-    const totalCustomers =
-      await this.customersRepository.count();
-
-    // stock bajo
-    const lowStockProducts =
-      await this.productsRepository.count({
-        where: {
-          stock: 0,
-        },
-      });
-
-    // pagos pendientes
-    const pendingPaymentsResult =
-      await this.ordersRepository
-        .createQueryBuilder('order')
-
-        .select(
-          'SUM(order.pendingAmount)',
-          'pendingPayments',
-        )
-
-        .getRawOne();
+    const purchasesResult = await this.purchasesRepository
+      .createQueryBuilder('purchase')
+      .select('SUM(purchase.total)', 'totalPurchases')
+      .getRawOne();
 
     return {
-      totalSales:
-        Number(
-          salesResult.totalSales,
-        ) || 0,
-
+      totalSales: Number(salesResult.totalSales) || 0,
       totalOrders,
-
       totalCustomers,
-
       lowStockProducts,
-
-      pendingPayments:
-        Number(
-          pendingPaymentsResult.pendingPayments,
-        ) || 0,
+      pendingPayments: Number(pendingPaymentsResult.pendingPayments) || 0,
+      totalPurchases: Number(purchasesResult.totalPurchases) || 0,
     };
   }
 }

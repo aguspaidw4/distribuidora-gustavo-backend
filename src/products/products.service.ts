@@ -26,7 +26,6 @@ export class ProductsService {
     return purchasePrice * (1 + profitMargin / 100);
   }
 
-  // Verifica si ya existe un producto activo o inactivo con el mismo nombre
   private async checkDuplicate(name: string, excludeId?: number): Promise<void> {
     const normalized = name.trim().toLowerCase();
     const all = await this.productsRepository.find();
@@ -99,14 +98,14 @@ export class ProductsService {
   async update(id: number, dto: UpdateProductDto) {
     const product = await this.findOne(id);
 
-    // Verificar duplicado solo si cambió el nombre
     if (dto.name && dto.name.trim().toLowerCase() !== product.name.trim().toLowerCase()) {
       await this.checkDuplicate(dto.name, id);
     }
 
+    const existingMargin = Number(product.profitMargin);
     Object.assign(product, dto);
 
-    const margin = Number(product.profitMargin);
+    const margin = Number(product.profitMargin) || existingMargin;
     product.salePriceUnit = this.calcSalePrice(product.purchasePriceUnit, margin);
     product.salePriceTira = this.calcSalePrice(product.purchasePriceTira, margin);
     product.salePriceCaja = this.calcSalePrice(product.purchasePriceCaja, margin);
@@ -147,127 +146,223 @@ export class ProductsService {
 
     products.sort((a, b) => a.name.localeCompare(b.name));
 
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    // autoFirstPage: false + bufferPages: true para control total
+    const doc = new PDFDocument({
+      margin: 0,
+      size: 'A4',
+      autoFirstPage: false,
+      bufferPages: true,
+    });
 
     const primaryColor = '#1a1a2e';
     const accentColor = '#2563eb';
-    const lightGray = '#f3f4f6';
     const darkGray = '#6b7280';
-    const pageWidth = 495;
 
-    const colProducto = 50;
-    const colUnidad = 245;
-    const colTira = 335;
-    const colCaja = 420;
-    const nameWidth = 185;
-    const minRowHeight = 30;
-    const fontSize = 10;
-    const lineHeight = 14;
-    const paddingV = 10;
+    // Dimensiones de página A4 en puntos
+    const PAGE_WIDTH = 595.28;
+    const PAGE_HEIGHT = 841.89;
+    const MARGIN_LEFT = 50;
+    const MARGIN_RIGHT = 50;
+    const TABLE_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
 
-    const formatARS = (value: number | string | null) =>
-      value !== null && value !== undefined
-        ? new Intl.NumberFormat('es-AR', {
-            style: 'currency',
-            currency: 'ARS',
-            minimumFractionDigits: 2,
-          }).format(Number(value))
-        : '—';
+    // Columnas (posición X absoluta)
+    const COL_PRODUCTO = MARGIN_LEFT + 6;
+    const COL_UNIDAD = MARGIN_LEFT + 240;
+    const COL_TIRA = MARGIN_LEFT + 330;
+    const COL_CAJA = MARGIN_LEFT + 400;
+    const COL_UNIDAD_W = 80;
+    const COL_TIRA_W = 60;
+    const COL_CAJA_W = 65;
+    const NAME_WIDTH = 230;
 
-    const estimateLines = (text: string, width: number, fSize: number): number => {
-      const charsPerLine = Math.floor(width / (fSize * 0.55));
-      if (charsPerLine <= 0) return 1;
-      return Math.ceil(text.length / charsPerLine);
+    const ROW_HEIGHT = 26;
+    const HEADER_HEIGHT = 28;
+    const FONT_SIZE = 9;
+    const ROW_PADDING_V = 8; // padding vertical dentro de la fila
+
+    // Zona segura de contenido en cada página
+    const CONTENT_TOP = 50;    // Y donde empieza el contenido (sin header de portada)
+    const CONTENT_BOTTOM = PAGE_HEIGHT - 60; // Y máximo antes del pie de página
+
+    const formatARS = (value: number | string | null | undefined): string => {
+      if (value === null || value === undefined) return '—';
+      const n = Number(value);
+      if (!n) return '—';
+      return new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 2,
+      }).format(n);
     };
 
-    const getRowHeight = (name: string): number => {
-      const lines = estimateLines(name, nameWidth, fontSize);
-      return Math.max(minRowHeight, lines * lineHeight + paddingV * 2);
+    // Truncar nombre para que entre en NAME_WIDTH a fontSize 9
+    // PDFKit Helvetica a 9pt: aprox 5.2px por char → 230px / 5.2 ≈ 44 chars
+    const truncateName = (name: string): string => {
+      const MAX = 44;
+      return name.length > MAX ? name.substring(0, MAX - 1) + '…' : name;
     };
 
     const fecha = new Date().toLocaleDateString('es-AR', {
       day: '2-digit', month: '2-digit', year: 'numeric',
     });
 
-    doc.rect(0, 0, 595, 90).fill(primaryColor);
-    doc.fillColor('#ffffff').fontSize(26).font('Helvetica-Bold')
-      .text('Distribuidora Gustavo', 50, 25);
-    doc.fontSize(11).fillColor('#93c5fd').font('Helvetica')
-      .text('Lista de Precios', 50, 57);
-    doc.fontSize(10).fillColor('#93c5fd').text(`Fecha: ${fecha}`, 50, 72);
-    doc.fillColor(darkGray).fontSize(10).font('Helvetica')
-      .text(`${products.length} producto${products.length !== 1 ? 's' : ''}`, 50, 105);
+    // ─── Función para dibujar el encabezado de tabla ───────────────────────────
+    const drawTableHeader = (y: number) => {
+      // Fondo del header
+      doc.rect(MARGIN_LEFT, y, TABLE_WIDTH, HEADER_HEIGHT).fill(accentColor);
 
-    const tableTop = 125;
-    const headerHeight = 30;
+      doc.fillColor('#ffffff').fontSize(FONT_SIZE).font('Helvetica-Bold');
+      // Usamos save/restore para evitar que text() mueva el cursor principal
+      doc.save();
+      doc.text('Producto', COL_PRODUCTO, y + 9, { lineBreak: false });
+      doc.restore();
 
-    doc.rect(50, tableTop, pageWidth, headerHeight).fill(accentColor);
-    doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
-      .text('Producto', colProducto + 8, tableTop + 10)
-      .text('Unidad', colUnidad, tableTop + 10, { width: 80, align: 'right' })
-      .text('Tira', colTira, tableTop + 10, { width: 75, align: 'right' })
-      .text('Caja', colCaja, tableTop + 10, { width: 75, align: 'right' });
+      doc.save();
+      doc.text('Unidad', COL_UNIDAD, y + 9, { width: COL_UNIDAD_W, align: 'right', lineBreak: false });
+      doc.restore();
 
-    let y = tableTop + headerHeight;
+      doc.save();
+      doc.text('Tira', COL_TIRA, y + 9, { width: COL_TIRA_W, align: 'right', lineBreak: false });
+      doc.restore();
 
-    products.forEach((product, index) => {
-      const rowHeight = getRowHeight(product.name);
-      const isEven = index % 2 === 0;
+      doc.save();
+      doc.text('Caja', COL_CAJA, y + 9, { width: COL_CAJA_W, align: 'right', lineBreak: false });
+      doc.restore();
+    };
 
-      if (y + rowHeight > 820) {
-        doc.addPage();
-        y = 50;
-        doc.rect(50, y, pageWidth, headerHeight).fill(accentColor);
-        doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold')
-          .text('Producto', colProducto + 8, y + 10)
-          .text('Unidad', colUnidad, y + 10, { width: 80, align: 'right' })
-          .text('Tira', colTira, y + 10, { width: 75, align: 'right' })
-          .text('Caja', colCaja, y + 10, { width: 75, align: 'right' });
-        y += headerHeight;
-      }
+    // ─── Función para dibujar UNA fila de producto ─────────────────────────────
+    // Recibe la posición Y exacta. No mueve ningún cursor global.
+    const drawRow = (product: Product, y: number, isEven: boolean) => {
+      // Fondo
+      doc.rect(MARGIN_LEFT, y, TABLE_WIDTH, ROW_HEIGHT)
+        .fill(isEven ? '#ffffff' : '#f9fafb');
 
-      doc.rect(50, y, pageWidth, rowHeight).fill(isEven ? '#ffffff' : lightGray);
-      const textY = y + paddingV;
-      doc.fillColor('#111827').fontSize(10).font('Helvetica')
-        .text(product.name, colProducto + 8, textY, { width: nameWidth, lineBreak: true });
+      const textY = y + ROW_PADDING_V;
 
-      const priceY = y + (rowHeight - fontSize) / 2;
+      // Nombre
+      doc.save();
+      doc.fillColor('#111827').fontSize(FONT_SIZE).font('Helvetica')
+        .text(truncateName(product.name), COL_PRODUCTO, textY, {
+          lineBreak: false,
+          ellipsis: false,
+        });
+      doc.restore();
 
+      // Precio Unidad
+      doc.save();
       if (product.salePriceUnit) {
         doc.fillColor('#166534').font('Helvetica-Bold')
-          .text(formatARS(product.salePriceUnit), colUnidad, priceY, { width: 80, align: 'right' });
+          .fontSize(FONT_SIZE)
+          .text(formatARS(product.salePriceUnit), COL_UNIDAD, textY, {
+            width: COL_UNIDAD_W, align: 'right', lineBreak: false,
+          });
       } else {
-        doc.fillColor(darkGray).font('Helvetica')
-          .text('—', colUnidad, priceY, { width: 80, align: 'right' });
+        doc.fillColor(darkGray).font('Helvetica').fontSize(FONT_SIZE)
+          .text('—', COL_UNIDAD, textY, {
+            width: COL_UNIDAD_W, align: 'right', lineBreak: false,
+          });
       }
+      doc.restore();
 
+      // Precio Tira
+      doc.save();
       if (product.salePriceTira) {
-        doc.fillColor('#1e40af').font('Helvetica-Bold')
-          .text(formatARS(product.salePriceTira), colTira, priceY, { width: 75, align: 'right' });
+        doc.fillColor('#1e40af').font('Helvetica-Bold').fontSize(FONT_SIZE)
+          .text(formatARS(product.salePriceTira), COL_TIRA, textY, {
+            width: COL_TIRA_W, align: 'right', lineBreak: false,
+          });
       } else {
-        doc.fillColor(darkGray).font('Helvetica')
-          .text('—', colTira, priceY, { width: 75, align: 'right' });
+        doc.fillColor(darkGray).font('Helvetica').fontSize(FONT_SIZE)
+          .text('—', COL_TIRA, textY, {
+            width: COL_TIRA_W, align: 'right', lineBreak: false,
+          });
       }
+      doc.restore();
 
+      // Precio Caja
+      doc.save();
       if (product.salePriceCaja) {
-        doc.fillColor('#6d28d9').font('Helvetica-Bold')
-          .text(formatARS(product.salePriceCaja), colCaja, priceY, { width: 75, align: 'right' });
+        doc.fillColor('#6d28d9').font('Helvetica-Bold').fontSize(FONT_SIZE)
+          .text(formatARS(product.salePriceCaja), COL_CAJA, textY, {
+            width: COL_CAJA_W, align: 'right', lineBreak: false,
+          });
       } else {
-        doc.fillColor(darkGray).font('Helvetica')
-          .text('—', colCaja, priceY, { width: 75, align: 'right' });
+        doc.fillColor(darkGray).font('Helvetica').fontSize(FONT_SIZE)
+          .text('—', COL_CAJA, textY, {
+            width: COL_CAJA_W, align: 'right', lineBreak: false,
+          });
+      }
+      doc.restore();
+
+      // Línea separadora inferior
+      doc.save();
+      doc.moveTo(MARGIN_LEFT, y + ROW_HEIGHT)
+        .lineTo(MARGIN_LEFT + TABLE_WIDTH, y + ROW_HEIGHT)
+        .strokeColor('#e5e7eb').lineWidth(0.5).stroke();
+      doc.restore();
+    };
+
+    // ─── PÁGINA 1: Portada con encabezado ──────────────────────────────────────
+    doc.addPage();
+
+    // Header de portada
+    doc.rect(0, 0, PAGE_WIDTH, 88).fill(primaryColor);
+    doc.fillColor('#ffffff').fontSize(24).font('Helvetica-Bold')
+      .text('Distribuidora Gustavo', MARGIN_LEFT, 22, { lineBreak: false });
+    doc.fillColor('#93c5fd').fontSize(11).font('Helvetica')
+      .text('Lista de Precios', MARGIN_LEFT, 55, { lineBreak: false });
+    doc.fillColor('#93c5fd').fontSize(10)
+      .text(`Fecha: ${fecha}`, MARGIN_LEFT, 70, { lineBreak: false });
+
+    // Subtítulo con conteo
+    doc.fillColor(darkGray).fontSize(10).font('Helvetica')
+      .text(
+        `${products.length} producto${products.length !== 1 ? 's' : ''}`,
+        MARGIN_LEFT, 100, { lineBreak: false },
+      );
+
+    // Encabezado de tabla en página 1
+    const FIRST_TABLE_TOP = 118;
+    drawTableHeader(FIRST_TABLE_TOP);
+
+    // ─── BUCLE DE FILAS ────────────────────────────────────────────────────────
+    // Mantenemos currentY nosotros mismos, PDFKit no avanza el cursor
+    let currentY = FIRST_TABLE_TOP + HEADER_HEIGHT;
+
+    products.forEach((product, index) => {
+      // ¿Entra la fila en la página actual?
+      if (currentY + ROW_HEIGHT > CONTENT_BOTTOM) {
+        // Nueva página
+        doc.addPage();
+        // Repetir encabezado de tabla
+        drawTableHeader(CONTENT_TOP);
+        currentY = CONTENT_TOP + HEADER_HEIGHT;
       }
 
-      doc.moveTo(50, y + rowHeight).lineTo(50 + pageWidth, y + rowHeight)
-        .strokeColor('#e5e7eb').lineWidth(0.5).stroke();
-
-      y += rowHeight;
+      drawRow(product, currentY, index % 2 === 0);
+      currentY += ROW_HEIGHT;
     });
 
-    doc.rect(50, y + 20, pageWidth, 1).fill('#e5e7eb');
-    doc.fillColor(darkGray).fontSize(9).font('Helvetica')
-      .text('Los precios pueden estar sujetos a cambios sin previo aviso.', 50, y + 30, {
-        align: 'center', width: pageWidth,
-      });
+    // ─── PIE DE PÁGINA ─────────────────────────────────────────────────────────
+    const footerY = currentY + 20;
+    // Si no entra el pie, nueva página
+    if (footerY + 30 > CONTENT_BOTTOM) {
+      doc.addPage();
+      doc.fillColor(darkGray).fontSize(9).font('Helvetica')
+        .text(
+          'Los precios pueden estar sujetos a cambios sin previo aviso.',
+          MARGIN_LEFT, CONTENT_TOP + 10,
+          { align: 'center', width: TABLE_WIDTH, lineBreak: false },
+        );
+    } else {
+      doc.rect(MARGIN_LEFT, footerY, TABLE_WIDTH, 1).fill('#e5e7eb');
+      doc.fillColor(darkGray).fontSize(9).font('Helvetica')
+        .text(
+          'Los precios pueden estar sujetos a cambios sin previo aviso.',
+          MARGIN_LEFT, footerY + 10,
+          { align: 'center', width: TABLE_WIDTH, lineBreak: false },
+        );
+    }
 
     doc.end();
     return doc;

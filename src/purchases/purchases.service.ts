@@ -154,4 +154,19 @@ export class PurchasesService {
 
     return this.purchasesRepository.save(purchase);
   }
+
+  async updateSupplier(id: number, supplierId: number) {
+    const purchase = await this.findOne(id);
+
+    const supplier = await this.suppliersRepository.findOne({
+      where: { id: supplierId },
+    });
+
+    if (!supplier) {
+      throw new NotFoundException(`Distribuidora #${supplierId} no encontrada`);
+    }
+
+    purchase.supplier = supplier;
+    return this.purchasesRepository.save(purchase);
+  }
 }

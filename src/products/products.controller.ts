@@ -12,12 +12,15 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { IsArray, IsInt } from 'class-validator';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 class PriceListDto {
+  @IsArray()
+  @IsInt({ each: true })
   productIds: number[];
 }
 
@@ -36,7 +39,6 @@ export class ProductsController {
     return this.productsService.findAll();
   }
 
-  // Productos eliminados (soft delete)
   @Get('deleted')
   findDeleted() {
     return this.productsService.findDeleted();
@@ -55,13 +57,20 @@ export class ProductsController {
     return this.productsService.update(id, dto);
   }
 
-  // Soft delete
+  // PATCH acepta actualizaciones parciales (ej: solo precios)
+  @Patch(':id')
+  partialUpdate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateProductDto,
+  ) {
+    return this.productsService.update(id, dto);
+  }
+
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.remove(id);
   }
 
-  // Restaurar producto eliminado
   @Patch(':id/restore')
   restore(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.restore(id);
